@@ -60,7 +60,7 @@ export default function InputPanel() {
     } catch (err: unknown) {
       dispatch({ type: "SET_ERROR", payload: (err as Error).message });
     }
-  }, [dispatch, state]);
+  }, [dispatch, state.runMode, state.inputMode, state.procName, state.tsql, state.paramValues, connectionString]);
 
   const loadSamples = useCallback(async () => {
     setSamplesLoading(true);

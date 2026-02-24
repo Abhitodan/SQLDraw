@@ -95,7 +95,34 @@ public sealed class ProcExecutor
                 foreach (var (name, value) in request.Params)
                 {
                     var paramName = name.StartsWith("@") ? name : $"@{name}";
-                    cmd.Parameters.AddWithValue(paramName, value ?? DBNull.Value);
+                    object dbValue = DBNull.Value;
+                    
+                    if (value != null)
+                    {
+                        // Unwrap System.Text.Json.JsonElement if it exists
+                        if (value is System.Text.Json.JsonElement jsonElement)
+                        {
+                            switch (jsonElement.ValueKind)
+                            {
+                                case System.Text.Json.JsonValueKind.String: dbValue = jsonElement.GetString()!; break;
+                                case System.Text.Json.JsonValueKind.Number: 
+                                    if (jsonElement.TryGetInt32(out int i)) dbValue = i;
+                                    else if (jsonElement.TryGetDouble(out double d)) dbValue = d;
+                                    else dbValue = jsonElement.GetRawText();
+                                    break;
+                                case System.Text.Json.JsonValueKind.True: dbValue = true; break;
+                                case System.Text.Json.JsonValueKind.False: dbValue = false; break;
+                                case System.Text.Json.JsonValueKind.Null: dbValue = DBNull.Value; break;
+                                default: dbValue = jsonElement.GetRawText(); break;
+                            }
+                        }
+                        else
+                        {
+                            dbValue = value;
+                        }
+                    }
+                    
+                    cmd.Parameters.AddWithValue(paramName, dbValue);
                 }
             }
 
