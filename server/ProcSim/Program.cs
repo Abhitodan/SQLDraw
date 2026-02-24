@@ -105,7 +105,9 @@ app.MapPost("/api/proc/run", async (RunRequest req, TsqlParser parser, ProcExecu
             _ => await sqlExecutor.ExecuteAsync(req, cfg) // "rollback" | "commit" — needs connection string
         };
 
-        await store.SaveRunAsync(result.RunId, req.ProcName ?? "(inline)", result);
+        try { await store.SaveRunAsync(result.RunId, req.ProcName ?? "(inline)", result); }
+        catch { /* non-fatal — run result still returned to client */ }
+
         return Results.Json(result, jsonOpts);
     }
     catch (Exception ex)
