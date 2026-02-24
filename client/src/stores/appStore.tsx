@@ -41,6 +41,7 @@ export interface AppState {
   // UI state
   selectedNodeId: string | null;
   selectedEventId: number | null;
+  selectionSource: "graph" | "trace" | null;
   timelinePosition: number; // 0..trace.length
   isLoading: boolean;
   error: string | null;
@@ -64,6 +65,7 @@ const initialState: AppState = {
   aiError: null,
   selectedNodeId: null,
   selectedEventId: null,
+  selectionSource: null,
   timelinePosition: -1,
   isLoading: false,
   error: null,
@@ -81,8 +83,8 @@ type Action =
   | { type: "RUN_START" }
   | { type: "RUN_SUCCESS"; payload: RunResponse }
   | { type: "SET_ERROR"; payload: string | null }
-  | { type: "SELECT_NODE"; payload: string | null }
-  | { type: "SELECT_EVENT"; payload: number | null }
+  | { type: "SELECT_NODE"; payload: { nodeId: string | null; source: "graph" | "trace" } }
+  | { type: "SELECT_EVENT"; payload: { eventId: number | null; source: "graph" | "trace" } }
   | { type: "SET_TIMELINE_POS"; payload: number }
   | { type: "LOAD_SAMPLE"; payload: { tsql: string } }
   | { type: "RESET" }
@@ -110,7 +112,7 @@ function reducer(state: AppState, action: Action): AppState {
     case "SET_PARAM_VALUE":
       return { ...state, paramValues: { ...state.paramValues, [action.payload.name]: action.payload.value } };
     case "PARSE_START":
-      return { ...state, isLoading: true, error: null, runResult: null, selectedNodeId: null, selectedEventId: null, timelinePosition: -1 };
+      return { ...state, isLoading: true, error: null, runResult: null, selectedNodeId: null, selectedEventId: null, selectionSource: null, timelinePosition: -1 };
     case "PARSE_SUCCESS":
       return {
         ...state,
@@ -150,18 +152,25 @@ function reducer(state: AppState, action: Action): AppState {
         timelinePosition: action.payload.result.trace.length,
         selectedEventId: null,
         selectedNodeId: null,
+        selectionSource: null,
       };
     case "SET_ERROR":
       return { ...state, isLoading: false, error: action.payload };
     case "SELECT_NODE":
-      return { ...state, selectedNodeId: action.payload };
+      return { 
+        ...state, 
+        selectedNodeId: action.payload.nodeId,
+        selectionSource: action.payload.source,
+        selectedEventId: action.payload.nodeId ? state.selectedEventId : null
+      };
     case "SELECT_EVENT": {
       // When selecting an event, also select its node and set timeline
-      const evt = state.runResult?.trace.find((e) => e.eventId === action.payload);
+      const evt = state.runResult?.trace.find((e) => e.eventId === action.payload.eventId);
       return {
         ...state,
-        selectedEventId: action.payload,
+        selectedEventId: action.payload.eventId,
         selectedNodeId: evt?.nodeId ?? state.selectedNodeId,
+        selectionSource: action.payload.source,
       };
     }
     case "SET_TIMELINE_POS":

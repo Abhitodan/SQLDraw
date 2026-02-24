@@ -39,18 +39,18 @@ const EVENT_LABELS: Record<string, string> = {
 };
 
 export default function TracePanel() {
-  const { runHistory, selectedNodeId, aiConfig, runResult } = useAppState();
+  const { runHistory, selectedNodeId, selectionSource, aiConfig, runResult } = useAppState();
   const [configModalVisible, setConfigModalVisible] = useState(false);
   const [activeTab, setActiveTab] = useState<"trace" | "ai" | "history">("trace");
 
   // When a CFG node is clicked from the graph, switch to trace tab
-  // CfgGraph already dispatches SELECT_NODE + SELECT_EVENT — we only need to switch tab
+  // CfgGraph already dispatches SELECT_NODE with source="graph" — we only need to switch tab
   useEffect(() => {
-    if (!selectedNodeId || !runResult?.trace) return;
+    if (selectionSource !== "graph" || !selectedNodeId || !runResult?.trace) return;
     const firstEvent = runResult.trace.find(e => e.nodeId === selectedNodeId);
     if (!firstEvent) return;
     setActiveTab("trace");
-  }, [selectedNodeId, runResult]);
+  }, [selectedNodeId, selectionSource, runResult]);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden", backgroundColor: "var(--neu-bg)" }}>
@@ -158,7 +158,7 @@ export default function TracePanel() {
 }
 
 function TraceContent() {
-  const { runResult, selectedEventId, selectedNodeId, timelinePosition } = useAppState();
+  const { runResult, selectedEventId, selectedNodeId, selectionSource, timelinePosition } = useAppState();
   const dispatch = useAppDispatch();
 
   // Map of eventId → DOM element for scroll-to
@@ -169,23 +169,23 @@ function TraceContent() {
     else rowRefs.current.delete(eventId);
   }, []);
 
-  // Scroll to selected event whenever it changes
+  // Scroll to selected event if selected from trace
   useEffect(() => {
-    if (selectedEventId == null) return;
+    if (selectionSource !== "trace" || selectedEventId == null) return;
     const el = rowRefs.current.get(selectedEventId);
     if (el) el.scrollIntoView({ behavior: "smooth", block: "nearest" });
-  }, [selectedEventId]);
+  }, [selectedEventId, selectionSource]);
 
-  // Also scroll when node selection changes (selectedNodeId effect in TracePanel already set selectedEventId)
+  // Scroll to first matching event if node clicked from graph
   useEffect(() => {
-    if (!selectedNodeId || !runResult?.trace) return;
+    if (selectionSource !== "graph" || !selectedNodeId || !runResult?.trace) return;
     const firstEvent = runResult.trace.find(e => e.nodeId === selectedNodeId);
     if (!firstEvent) return;
     setTimeout(() => {
       const el = rowRefs.current.get(firstEvent.eventId);
       if (el) el.scrollIntoView({ behavior: "smooth", block: "nearest" });
     }, 80);
-  }, [selectedNodeId, runResult]);
+  }, [selectedNodeId, selectionSource, runResult]);
 
   const selectedEvent = runResult?.trace.find(e => e.eventId === selectedEventId) ?? null;
 
@@ -262,7 +262,7 @@ function TraceContent() {
                 index={idx}
                 isVisible={idx < timelinePosition}
                 isSelected={evt.eventId === selectedEventId}
-                onClick={() => dispatch({ type: "SELECT_EVENT", payload: evt.eventId })}
+                onClick={() => dispatch({ type: "SELECT_EVENT", payload: { eventId: evt.eventId, source: "trace" } })}
                 setRef={(el) => setRowRef(evt.eventId, el)}
               />
             ))}

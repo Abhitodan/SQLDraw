@@ -19,7 +19,7 @@ const nodeTypes: NodeTypes = {
 };
 
 function CfgGraph() {
-  const { cfg, runResult, selectedNodeId, selectedEventId } = useAppState();
+  const { cfg, runResult, selectedNodeId, selectionSource } = useAppState();
   const dispatch = useAppDispatch();
   const { setCenter, fitView } = useReactFlow();
 
@@ -49,25 +49,18 @@ function CfgGraph() {
     filteredTypes,
   );
 
-  // Sync selectedEventId -> selectedNodeId
+  // Sync selectedEventId -> selectedNodeId ONLY if clicked from trace
   useEffect(() => {
-    if (selectedEventId !== null && runResult?.trace) {
-      const event = runResult.trace.find(e => e.eventId === selectedEventId);
-      if (event && event.nodeId) {
-        // Select the node associated with this event
-        dispatch({ type: "SELECT_NODE", payload: event.nodeId });
-        
-        // Also center the graph on this node
-        const node = nodes.find(n => n.id === event.nodeId);
-        if (node) {
-          // Add a slight delay to ensure the DOM is ready for the transition
-          setTimeout(() => {
-            setCenter(node.position.x + 100, node.position.y + 50, { duration: 800, zoom: 1.2 });
-          }, 50);
-        }
+    if (selectedNodeId !== null && selectionSource === "trace" && runResult?.trace) {
+      const node = nodes.find(n => n.id === selectedNodeId);
+      if (node) {
+        // Add a slight delay to ensure the DOM is ready for the transition
+        setTimeout(() => {
+          setCenter(node.position.x + 100, node.position.y + 50, { duration: 800, zoom: 1.2 });
+        }, 50);
       }
     }
-  }, [selectedEventId, runResult, dispatch, nodes, setCenter]);
+  }, [selectedNodeId, selectionSource, runResult, nodes, setCenter]);
 
   // Fit view when CFG first loads (no run result yet)
   useEffect(() => {
@@ -94,7 +87,7 @@ function CfgGraph() {
 
   const onNodeClick = useCallback(
     (_: React.MouseEvent, node: { id: string }) => {
-      dispatch({ type: "SELECT_NODE", payload: node.id });
+      dispatch({ type: "SELECT_NODE", payload: { nodeId: node.id, source: "graph" } });
     },
     [dispatch],
   );
