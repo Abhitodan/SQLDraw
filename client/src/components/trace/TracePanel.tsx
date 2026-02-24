@@ -1,4 +1,4 @@
-import { useMemo, useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { Tag, Typography, Slider, Empty, Space, Button } from "antd";
 import {
   CheckCircleOutlined,
@@ -39,148 +39,19 @@ const EVENT_LABELS: Record<string, string> = {
 };
 
 export default function TracePanel() {
-  const { runResult, runHistory, selectedEventId, selectedNodeId, timelinePosition, aiConfig } = useAppState();
+  const { runHistory, selectedNodeId, aiConfig, runResult } = useAppState();
   const dispatch = useAppDispatch();
   const [configModalVisible, setConfigModalVisible] = useState(false);
   const [activeTab, setActiveTab] = useState<"trace" | "ai" | "history">("trace");
 
-  // Refs for scrolling to trace rows
-  const eventRowRefs = useRef<Map<number, HTMLDivElement>>(new Map());
-  const traceScrollRef = useRef<HTMLDivElement>(null);
-
-  const selectedEvent = useMemo(
-    () => runResult?.trace.find((e) => e.eventId === selectedEventId) ?? null,
-    [runResult, selectedEventId],
-  );
-
-  // When a CFG node is selected, find its first trace event and scroll to it
+  // When a CFG node is clicked, switch to trace tab so scroll works on a visible container
   useEffect(() => {
     if (!selectedNodeId || !runResult?.trace) return;
     const firstEvent = runResult.trace.find(e => e.nodeId === selectedNodeId);
     if (!firstEvent) return;
-    // Select that event
+    setActiveTab("trace");
     dispatch({ type: "SELECT_EVENT", payload: firstEvent.eventId });
-    // Scroll to it after a tick so the DOM ref is ready
-    setTimeout(() => {
-      const el = eventRowRefs.current.get(firstEvent.eventId);
-      el?.scrollIntoView({ behavior: "smooth", block: "center" });
-    }, 50);
-  }, [selectedNodeId]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // When an event is selected directly, scroll to it
-  useEffect(() => {
-    if (selectedEventId === null) return;
-    setTimeout(() => {
-      const el = eventRowRefs.current.get(selectedEventId);
-      el?.scrollIntoView({ behavior: "smooth", block: "center" });
-    }, 50);
-  }, [selectedEventId]);
-
-  const setRowRef = useCallback((eventId: number, el: HTMLDivElement | null) => {
-    if (el) eventRowRefs.current.set(eventId, el);
-    else eventRowRefs.current.delete(eventId);
-  }, []);
-
-  const traceContent = useMemo(() => {
-    if (!runResult) {
-      return (
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%", padding: 24 }}>
-          <Empty description="Run a procedure to see execution trace" image={Empty.PRESENTED_IMAGE_SIMPLE} />
-        </div>
-      );
-    }
-
-    const { summary, trace } = runResult;
-
-    return (
-      <div className="ws-panel-scroll" ref={traceScrollRef}>
-        {/* Summary */}
-        <div className="neu-inset" style={{ padding: 16, borderRadius: 16, marginBottom: 24, marginTop: 16 }}>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 12, alignItems: "center" }}>
-            <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-              <DatabaseOutlined style={{ color: "var(--neu-info)" }} />
-              <Text strong>{summary.totalStatements}</Text>
-              <Text type="secondary" style={{ fontSize: 12 }}>Stmts</Text>
-            </div>
-            <div style={{ width: 1, height: 16, background: "var(--neu-inset-deep)" }} />
-            <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-              <Text strong style={{ color: "var(--neu-success)" }}>{summary.totalRowsAffected}</Text>
-              <Text type="secondary" style={{ fontSize: 12 }}>Rows</Text>
-            </div>
-            <div style={{ width: 1, height: 16, background: "var(--neu-inset-deep)" }} />
-            <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-              <Text strong style={{ color: "var(--neu-warning)" }}>{summary.totalDurationMs.toFixed(1)}ms</Text>
-            </div>
-            <div style={{ display: "flex", gap: 8, marginLeft: "auto", alignItems: "center" }}>
-              <Tag
-                icon={summary.hadError ? <CloseCircleOutlined /> : <CheckCircleOutlined />}
-                color={summary.hadError ? "error" : "success"}
-                style={{ margin: 0, borderRadius: 12 }}
-              >
-                {summary.hadError ? "ERROR" : "OK"}
-              </Tag>
-              <Tag icon={<RollbackOutlined />} color={summary.mode === "rollback" ? "purple" : "blue"} style={{ margin: 0, borderRadius: 12 }}>
-                {summary.mode.toUpperCase()}
-              </Tag>
-            </div>
-          </div>
-        </div>
-
-        {/* Timeline Scrubber */}
-        <div style={{ marginBottom: 24 }}>
-          <Text type="secondary" style={{ fontSize: 12, fontWeight: 600, display: "block", marginBottom: 8 }}>TIMELINE</Text>
-          <Slider
-            min={0}
-            max={trace.length}
-            value={timelinePosition}
-            onChange={(v) => dispatch({ type: "SET_TIMELINE_POS", payload: v })}
-            tooltip={{
-              formatter: (v) => {
-                if (v === undefined || v === null) return "";
-                return v === 0 ? "Start" : v >= trace.length ? "End" : `Step ${v}`;
-              },
-            }}
-          />
-        </div>
-
-        {/* Event List */}
-        <div style={{ marginBottom: 24 }}>
-          <Text type="secondary" style={{ fontSize: 12, fontWeight: 600, display: "block", marginBottom: 12 }}>EXECUTION TRACE</Text>
-          <div className="neu-inset-deep" style={{ padding: 12, borderRadius: 16 }}>
-            <Space orientation="vertical" size={8} style={{ width: "100%" }}>
-              {trace.map((evt, idx) => (
-                <TraceEventRow
-                  key={evt.eventId}
-                  event={evt}
-                  index={idx}
-                  isVisible={idx < timelinePosition}
-                  isSelected={evt.eventId === selectedEventId}
-                  onClick={() => dispatch({ type: "SELECT_EVENT", payload: evt.eventId })}
-                  setRef={(el) => setRowRef(evt.eventId, el)}
-                />
-              ))}
-            </Space>
-          </div>
-        </div>
-
-        {/* Detail Panel */}
-        <AnimatePresence>
-          {selectedEvent && (
-            <motion.div
-              initial={{ height: 0, opacity: 0 }}
-              animate={{ height: "auto", opacity: 1 }}
-              exit={{ height: 0, opacity: 0 }}
-              transition={{ duration: 0.2 }}
-              className="neu-inset"
-              style={{ borderRadius: 16, overflow: "hidden", marginBottom: 16 }}
-            >
-              <TraceDetail event={selectedEvent} />
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </div>
-    );
-  }, [runResult, selectedEventId, timelinePosition, dispatch, setRowRef]);
+  }, [selectedNodeId, runResult, dispatch]);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden", backgroundColor: "var(--neu-bg)" }}>
@@ -270,7 +141,7 @@ export default function TracePanel() {
 
       {/* Tab Content */}
       <div style={{ flex: 1, minHeight: 0, overflow: "hidden", display: activeTab === "trace" ? "flex" : "none", flexDirection: "column", backgroundColor: "var(--neu-bg)" }}>
-        {traceContent}
+        <TraceContent />
       </div>
       <div style={{ flex: 1, minHeight: 0, overflow: "hidden", display: activeTab === "ai" ? "flex" : "none", flexDirection: "column", backgroundColor: "var(--neu-bg)" }}>
         <AiChatPanel />
@@ -283,6 +154,138 @@ export default function TracePanel() {
         visible={configModalVisible}
         onClose={() => setConfigModalVisible(false)}
       />
+    </div>
+  );
+}
+
+function TraceContent() {
+  const { runResult, selectedEventId, selectedNodeId, timelinePosition } = useAppState();
+  const dispatch = useAppDispatch();
+
+  // Map of eventId → DOM element for scroll-to
+  const rowRefs = useRef<Map<number, HTMLElement>>(new Map());
+
+  const setRowRef = useCallback((eventId: number, el: HTMLElement | null) => {
+    if (el) rowRefs.current.set(eventId, el);
+    else rowRefs.current.delete(eventId);
+  }, []);
+
+  // Scroll to selected event whenever it changes
+  useEffect(() => {
+    if (selectedEventId == null) return;
+    const el = rowRefs.current.get(selectedEventId);
+    if (el) el.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }, [selectedEventId]);
+
+  // Also scroll when node selection changes (selectedNodeId effect in TracePanel already set selectedEventId)
+  useEffect(() => {
+    if (!selectedNodeId || !runResult?.trace) return;
+    const firstEvent = runResult.trace.find(e => e.nodeId === selectedNodeId);
+    if (!firstEvent) return;
+    setTimeout(() => {
+      const el = rowRefs.current.get(firstEvent.eventId);
+      if (el) el.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }, 80);
+  }, [selectedNodeId, runResult]);
+
+  const selectedEvent = runResult?.trace.find(e => e.eventId === selectedEventId) ?? null;
+
+  if (!runResult) {
+    return (
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%", padding: 24 }}>
+        <Empty description="Run a procedure to see execution trace" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+      </div>
+    );
+  }
+
+  const { summary, trace } = runResult;
+
+  return (
+    <div className="ws-panel-scroll">
+      {/* Summary */}
+      <div className="neu-inset" style={{ padding: 16, borderRadius: 16, marginBottom: 24, marginTop: 16 }}>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 12, alignItems: "center" }}>
+          <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+            <DatabaseOutlined style={{ color: "var(--neu-info)" }} />
+            <Text strong>{summary.totalStatements}</Text>
+            <Text type="secondary" style={{ fontSize: 12 }}>Stmts</Text>
+          </div>
+          <div style={{ width: 1, height: 16, background: "var(--neu-inset-deep)" }} />
+          <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+            <Text strong style={{ color: "var(--neu-success)" }}>{summary.totalRowsAffected}</Text>
+            <Text type="secondary" style={{ fontSize: 12 }}>Rows</Text>
+          </div>
+          <div style={{ width: 1, height: 16, background: "var(--neu-inset-deep)" }} />
+          <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+            <Text strong style={{ color: "var(--neu-warning)" }}>{summary.totalDurationMs.toFixed(1)}ms</Text>
+          </div>
+          <div style={{ display: "flex", gap: 8, marginLeft: "auto", alignItems: "center" }}>
+            <Tag
+              icon={summary.hadError ? <CloseCircleOutlined /> : <CheckCircleOutlined />}
+              color={summary.hadError ? "error" : "success"}
+              style={{ margin: 0, borderRadius: 12 }}
+            >
+              {summary.hadError ? "ERROR" : "OK"}
+            </Tag>
+            <Tag icon={<RollbackOutlined />} color={summary.mode === "rollback" ? "purple" : "blue"} style={{ margin: 0, borderRadius: 12 }}>
+              {summary.mode.toUpperCase()}
+            </Tag>
+          </div>
+        </div>
+      </div>
+
+      {/* Timeline Scrubber */}
+      <div style={{ marginBottom: 24 }}>
+        <Text type="secondary" style={{ fontSize: 12, fontWeight: 600, display: "block", marginBottom: 8 }}>TIMELINE</Text>
+        <Slider
+          min={0}
+          max={trace.length}
+          value={timelinePosition}
+          onChange={(v) => dispatch({ type: "SET_TIMELINE_POS", payload: v })}
+          tooltip={{
+            formatter: (v) => {
+              if (v === undefined || v === null) return "";
+              return v === 0 ? "Start" : v >= trace.length ? "End" : `Step ${v}`;
+            },
+          }}
+        />
+      </div>
+
+      {/* Event List */}
+      <div style={{ marginBottom: 24 }}>
+        <Text type="secondary" style={{ fontSize: 12, fontWeight: 600, display: "block", marginBottom: 12 }}>EXECUTION TRACE</Text>
+        <div className="neu-inset-deep" style={{ padding: 12, borderRadius: 16 }}>
+          <Space direction="vertical" size={8} style={{ width: "100%" }}>
+            {trace.map((evt, idx) => (
+              <TraceEventRow
+                key={evt.eventId}
+                event={evt}
+                index={idx}
+                isVisible={idx < timelinePosition}
+                isSelected={evt.eventId === selectedEventId}
+                onClick={() => dispatch({ type: "SELECT_EVENT", payload: evt.eventId })}
+                setRef={(el) => setRowRef(evt.eventId, el)}
+              />
+            ))}
+          </Space>
+        </div>
+      </div>
+
+      {/* Detail Panel */}
+      <AnimatePresence>
+        {selectedEvent && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="neu-inset"
+            style={{ borderRadius: 16, overflow: "hidden", marginBottom: 16 }}
+          >
+            <TraceDetail event={selectedEvent} />
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
