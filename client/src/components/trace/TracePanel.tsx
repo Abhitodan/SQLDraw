@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useRef, useEffect, useCallback } from "react";
 import { Tag, Typography, Slider, Empty, Space, Button } from "antd";
 import {
   CheckCircleOutlined,
@@ -6,9 +6,11 @@ import {
   DatabaseOutlined,
   RollbackOutlined,
   RobotOutlined,
+  HistoryOutlined,
 } from "@ant-design/icons";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAppState, useAppDispatch } from "../../stores/appStore";
+import type { RunHistoryEntry } from "../../stores/appStore";
 import type { TraceEvent } from "../../api/types";
 import ResultPreview from "./ResultPreview";
 import AiChatPanel from "../ai/AiChatPanel";
@@ -37,15 +39,47 @@ const EVENT_LABELS: Record<string, string> = {
 };
 
 export default function TracePanel() {
-  const { runResult, selectedEventId, timelinePosition, aiConfig } = useAppState();
+  const { runResult, runHistory, selectedEventId, selectedNodeId, timelinePosition, aiConfig } = useAppState();
   const dispatch = useAppDispatch();
   const [configModalVisible, setConfigModalVisible] = useState(false);
-  const [activeTab, setActiveTab] = useState<"trace" | "ai">("trace");
+  const [activeTab, setActiveTab] = useState<"trace" | "ai" | "history">("trace");
+
+  // Refs for scrolling to trace rows
+  const eventRowRefs = useRef<Map<number, HTMLDivElement>>(new Map());
+  const traceScrollRef = useRef<HTMLDivElement>(null);
 
   const selectedEvent = useMemo(
     () => runResult?.trace.find((e) => e.eventId === selectedEventId) ?? null,
     [runResult, selectedEventId],
   );
+
+  // When a CFG node is selected, find its first trace event and scroll to it
+  useEffect(() => {
+    if (!selectedNodeId || !runResult?.trace) return;
+    const firstEvent = runResult.trace.find(e => e.nodeId === selectedNodeId);
+    if (!firstEvent) return;
+    // Select that event
+    dispatch({ type: "SELECT_EVENT", payload: firstEvent.eventId });
+    // Scroll to it after a tick so the DOM ref is ready
+    setTimeout(() => {
+      const el = eventRowRefs.current.get(firstEvent.eventId);
+      el?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 50);
+  }, [selectedNodeId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // When an event is selected directly, scroll to it
+  useEffect(() => {
+    if (selectedEventId === null) return;
+    setTimeout(() => {
+      const el = eventRowRefs.current.get(selectedEventId);
+      el?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 50);
+  }, [selectedEventId]);
+
+  const setRowRef = useCallback((eventId: number, el: HTMLDivElement | null) => {
+    if (el) eventRowRefs.current.set(eventId, el);
+    else eventRowRefs.current.delete(eventId);
+  }, []);
 
   const traceContent = useMemo(() => {
     if (!runResult) {
@@ -59,7 +93,7 @@ export default function TracePanel() {
     const { summary, trace } = runResult;
 
     return (
-      <div className="ws-panel-scroll">
+      <div className="ws-panel-scroll" ref={traceScrollRef}>
         {/* Summary */}
         <div className="neu-inset" style={{ padding: 16, borderRadius: 16, marginBottom: 24, marginTop: 16 }}>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 12, alignItems: "center" }}>
@@ -77,7 +111,6 @@ export default function TracePanel() {
             <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
               <Text strong style={{ color: "var(--neu-warning)" }}>{summary.totalDurationMs.toFixed(1)}ms</Text>
             </div>
-            
             <div style={{ display: "flex", gap: 8, marginLeft: "auto", alignItems: "center" }}>
               <Tag
                 icon={summary.hadError ? <CloseCircleOutlined /> : <CheckCircleOutlined />}
@@ -123,6 +156,7 @@ export default function TracePanel() {
                   isVisible={idx < timelinePosition}
                   isSelected={evt.eventId === selectedEventId}
                   onClick={() => dispatch({ type: "SELECT_EVENT", payload: evt.eventId })}
+                  setRef={(el) => setRowRef(evt.eventId, el)}
                 />
               ))}
             </Space>
@@ -146,7 +180,7 @@ export default function TracePanel() {
         </AnimatePresence>
       </div>
     );
-  }, [runResult, selectedEventId, timelinePosition, dispatch]);
+  }, [runResult, selectedEventId, timelinePosition, dispatch, setRowRef]);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden", backgroundColor: "var(--neu-bg)" }}>
@@ -198,6 +232,35 @@ export default function TracePanel() {
         >
           <RobotOutlined /> AI
         </button>
+        <button
+          onClick={() => setActiveTab("history")}
+          style={{
+            background: "none",
+            border: "none",
+            borderBottom: activeTab === "history" ? "2px solid var(--neu-accent)" : "2px solid transparent",
+            padding: "12px 16px",
+            cursor: "pointer",
+            fontSize: 13,
+            fontWeight: activeTab === "history" ? 600 : 400,
+            color: activeTab === "history" ? "var(--neu-accent)" : "var(--neu-muted)",
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
+          }}
+        >
+          <HistoryOutlined /> History
+          {runHistory.length > 0 && (
+            <span style={{
+              background: "var(--neu-accent)",
+              color: "#fff",
+              borderRadius: 10,
+              fontSize: 10,
+              padding: "1px 6px",
+              marginLeft: 2,
+              fontWeight: 700,
+            }}>{runHistory.length}</span>
+          )}
+        </button>
         {!aiConfig && (
           <Button size="small" type="link" onClick={() => setConfigModalVisible(true)} style={{ marginLeft: "auto" }}>
             Configure AI
@@ -205,12 +268,15 @@ export default function TracePanel() {
         )}
       </div>
 
-      {/* Tab Content — only one is ever mounted and visible */}
+      {/* Tab Content */}
       <div style={{ flex: 1, minHeight: 0, overflow: "hidden", display: activeTab === "trace" ? "flex" : "none", flexDirection: "column", backgroundColor: "var(--neu-bg)" }}>
         {traceContent}
       </div>
       <div style={{ flex: 1, minHeight: 0, overflow: "hidden", display: activeTab === "ai" ? "flex" : "none", flexDirection: "column", backgroundColor: "var(--neu-bg)" }}>
         <AiChatPanel />
+      </div>
+      <div style={{ flex: 1, minHeight: 0, overflow: "hidden", display: activeTab === "history" ? "flex" : "none", flexDirection: "column", backgroundColor: "var(--neu-bg)" }}>
+        <HistoryTab />
       </div>
 
       <AiConfigModal
@@ -227,15 +293,18 @@ function TraceEventRow({
   isVisible,
   isSelected,
   onClick,
+  setRef,
 }: {
   event: TraceEvent;
   index: number;
   isVisible: boolean;
   isSelected: boolean;
   onClick: () => void;
+  setRef: (el: HTMLDivElement | null) => void;
 }) {
   return (
     <motion.div
+      ref={setRef}
       initial={false}
       animate={{ opacity: isVisible ? 1 : 0.4 }}
       transition={{ duration: 0.2 }}
@@ -324,6 +393,71 @@ function TraceDetail({ event: evt }: { event: TraceEvent }) {
           <ResultPreview columns={evt.resultSetColumns} rows={evt.resultSetPreviewRows} />
         </div>
       )}
+    </div>
+  );
+}
+
+function HistoryTab() {
+  const { runHistory, runResult } = useAppState();
+  const dispatch = useAppDispatch();
+
+  if (runHistory.length === 0) {
+    return (
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%", padding: 24 }}>
+        <Empty description="No runs yet this session" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+      </div>
+    );
+  }
+
+  return (
+    <div className="ws-panel-scroll">
+      <div style={{ padding: "16px 16px 8px" }}>
+        <Text type="secondary" style={{ fontSize: 12, fontWeight: 600 }}>SESSION RUN HISTORY</Text>
+      </div>
+      <div style={{ padding: "0 16px 16px", display: "flex", flexDirection: "column", gap: 8 }}>
+        {runHistory.map((entry: RunHistoryEntry, idx: number) => {
+          const isActive = runResult?.runId === entry.runId;
+          const time = new Date(entry.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+          return (
+            <div
+              key={entry.runId}
+              onClick={() => dispatch({ type: "LOAD_RUN_FROM_HISTORY", payload: entry })}
+              className={isActive ? "neu-inset" : "neu-button"}
+              style={{
+                padding: "12px 14px",
+                borderRadius: 12,
+                cursor: "pointer",
+                border: isActive ? "1px solid var(--neu-accent)" : "none",
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                <Tag
+                  icon={entry.hadError ? <CloseCircleOutlined /> : <CheckCircleOutlined />}
+                  color={entry.hadError ? "error" : "success"}
+                  style={{ margin: 0, borderRadius: 10, fontSize: 10 }}
+                >
+                  {entry.hadError ? "ERROR" : "OK"}
+                </Tag>
+                <Tag color={entry.mode === "rollback" ? "purple" : entry.mode === "commit" ? "blue" : "default"} style={{ margin: 0, borderRadius: 10, fontSize: 10 }}>
+                  {entry.mode.toUpperCase()}
+                </Tag>
+                <Text style={{ fontSize: 12, color: "var(--neu-fg)", fontWeight: isActive ? 600 : 400, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {entry.procName}
+                </Text>
+                {isActive && (
+                  <Tag color="processing" style={{ margin: 0, borderRadius: 10, fontSize: 10 }}>active</Tag>
+                )}
+              </div>
+              <div style={{ display: "flex", gap: 12, fontSize: 11, color: "var(--neu-muted)" }}>
+                <span>#{runHistory.length - idx}</span>
+                <span>{entry.totalStatements} stmts</span>
+                <span>{entry.totalDurationMs.toFixed(1)}ms</span>
+                <span style={{ marginLeft: "auto" }}>{time}</span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

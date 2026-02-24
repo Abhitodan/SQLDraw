@@ -1,6 +1,17 @@
 import { createContext, useContext, useReducer, useEffect, type Dispatch, type ReactNode } from "react";
 import type { ControlFlowGraph, ProcParameter, RunResponse, AiConfig, AiChatMessage } from "../api/types";
 
+export interface RunHistoryEntry {
+  runId: string;
+  procName: string;
+  mode: string;
+  createdAt: string;
+  hadError: boolean;
+  totalStatements: number;
+  totalDurationMs: number;
+  result: RunResponse;
+}
+
 export interface AppState {
   // Input
   inputMode: "paste" | "fetch";
@@ -24,6 +35,9 @@ export interface AppState {
   aiStreaming: boolean;
   aiError: string | null;
 
+  // Run history (in-memory, current session)
+  runHistory: RunHistoryEntry[];
+
   // UI state
   selectedNodeId: string | null;
   selectedEventId: number | null;
@@ -43,6 +57,7 @@ const initialState: AppState = {
   runMode: "dryrun",         // changed default from "rollback"
   paramValues: {},
   runResult: null,
+  runHistory: [],
   aiConfig: null,
   aiMessages: [],
   aiStreaming: false,
@@ -71,6 +86,7 @@ type Action =
   | { type: "SET_TIMELINE_POS"; payload: number }
   | { type: "LOAD_SAMPLE"; payload: { tsql: string } }
   | { type: "RESET" }
+  | { type: "LOAD_RUN_FROM_HISTORY"; payload: RunHistoryEntry }
   | { type: "SET_AI_CONFIG"; payload: AiConfig | null }
   | { type: "AI_MESSAGE_ADD"; payload: AiChatMessage }
   | { type: "AI_STREAMING_START" }
@@ -108,12 +124,32 @@ function reducer(state: AppState, action: Action): AppState {
       };
     case "RUN_START":
       return { ...state, isLoading: true, error: null };
-    case "RUN_SUCCESS":
+    case "RUN_SUCCESS": {
+      const entry: RunHistoryEntry = {
+        runId: action.payload.runId,
+        procName: state.procName || "(inline)",
+        mode: action.payload.summary.mode,
+        createdAt: new Date().toISOString(),
+        hadError: action.payload.summary.hadError,
+        totalStatements: action.payload.summary.totalStatements,
+        totalDurationMs: action.payload.summary.totalDurationMs,
+        result: action.payload,
+      };
       return {
         ...state,
         isLoading: false,
         runResult: action.payload,
         timelinePosition: action.payload.trace.length,
+        runHistory: [entry, ...state.runHistory].slice(0, 20),
+      };
+    }
+    case "LOAD_RUN_FROM_HISTORY":
+      return {
+        ...state,
+        runResult: action.payload.result,
+        timelinePosition: action.payload.result.trace.length,
+        selectedEventId: null,
+        selectedNodeId: null,
       };
     case "SET_ERROR":
       return { ...state, isLoading: false, error: action.payload };
