@@ -1,0 +1,6 @@
+@ProcSim_HostAddress = http://localhost:5219
+
+GET {{ProcSim_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
