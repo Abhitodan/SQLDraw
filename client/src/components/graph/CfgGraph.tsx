@@ -19,7 +19,7 @@ const nodeTypes: NodeTypes = {
 };
 
 function CfgGraph() {
-  const { cfg, runResult, selectedNodeId, selectionSource } = useAppState();
+  const { cfg, runResult, selectedNodeId, selectionSource, timelinePosition } = useAppState();
   const dispatch = useAppDispatch();
   const { setCenter, fitView } = useReactFlow();
 
@@ -48,6 +48,25 @@ function CfgGraph() {
     dimUnexecuted,
     filteredTypes,
   );
+
+  // Auto-follow the execution trace as the timeline scrubber moves
+  useEffect(() => {
+    if (!runResult?.trace || timelinePosition <= 0) return;
+    
+    // The current executing step is the one just before timelinePosition
+    const currentEventIndex = timelinePosition - 1;
+    if (currentEventIndex >= runResult.trace.length) return;
+    
+    const currentEvent = runResult.trace[currentEventIndex];
+    if (!currentEvent?.nodeId) return;
+
+    // Only auto-center if we're not actively clicking around the graph/trace manually
+    // We can assume scrubber movement if selectionSource is null or we just want to follow it anyway
+    const node = nodes.find(n => n.id === currentEvent.nodeId);
+    if (node) {
+      setCenter(node.position.x + 100, node.position.y + 50, { duration: 400, zoom: 1.2 });
+    }
+  }, [timelinePosition, runResult, nodes, setCenter]);
 
   // Sync selectedEventId -> selectedNodeId ONLY if clicked from trace
   useEffect(() => {
