@@ -40,18 +40,17 @@ const EVENT_LABELS: Record<string, string> = {
 
 export default function TracePanel() {
   const { runHistory, selectedNodeId, aiConfig, runResult } = useAppState();
-  const dispatch = useAppDispatch();
   const [configModalVisible, setConfigModalVisible] = useState(false);
   const [activeTab, setActiveTab] = useState<"trace" | "ai" | "history">("trace");
 
-  // When a CFG node is clicked, switch to trace tab so scroll works on a visible container
+  // When a CFG node is clicked from the graph, switch to trace tab
+  // CfgGraph already dispatches SELECT_NODE + SELECT_EVENT — we only need to switch tab
   useEffect(() => {
     if (!selectedNodeId || !runResult?.trace) return;
     const firstEvent = runResult.trace.find(e => e.nodeId === selectedNodeId);
     if (!firstEvent) return;
     setActiveTab("trace");
-    dispatch({ type: "SELECT_EVENT", payload: firstEvent.eventId });
-  }, [selectedNodeId, runResult, dispatch]);
+  }, [selectedNodeId, runResult]);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden", backgroundColor: "var(--neu-bg)" }}>
@@ -255,7 +254,7 @@ function TraceContent() {
       <div style={{ marginBottom: 24 }}>
         <Text type="secondary" style={{ fontSize: 12, fontWeight: 600, display: "block", marginBottom: 12 }}>EXECUTION TRACE</Text>
         <div className="neu-inset-deep" style={{ padding: 12, borderRadius: 16 }}>
-          <Space direction="vertical" size={8} style={{ width: "100%" }}>
+          <Space orientation="vertical" size={8} style={{ width: "100%" }}>
             {trace.map((evt, idx) => (
               <TraceEventRow
                 key={evt.eventId}
