@@ -49,37 +49,38 @@ function CfgGraph() {
     filteredTypes,
   );
 
-  // Auto-follow the execution trace as the timeline scrubber moves
+  // Handle all graph centering logic in one place to prevent fighting effects
   useEffect(() => {
-    if (!runResult?.trace || timelinePosition <= 0) return;
-    
-    // The current executing step is the one just before timelinePosition
-    const currentEventIndex = timelinePosition - 1;
-    if (currentEventIndex >= runResult.trace.length) return;
-    
-    const currentEvent = runResult.trace[currentEventIndex];
-    if (!currentEvent?.nodeId) return;
+    if (!runResult || !cfg) return;
 
-    // Only auto-center if we're not actively clicking around the graph/trace manually
-    // We can assume scrubber movement if selectionSource is null or we just want to follow it anyway
-    const node = nodes.find(n => n.id === currentEvent.nodeId);
-    if (node) {
-      setCenter(node.position.x + 100, node.position.y + 50, { duration: 400, zoom: 1.2 });
+    let targetNodeId: string | null = null;
+
+    // Priority 1: User explicitly clicked a trace event
+    if (selectionSource === "trace" && selectedNodeId) {
+      targetNodeId = selectedNodeId;
+    } 
+    // Priority 2: User is scrubbing the timeline (and hasn't just clicked a trace event)
+    else if (timelinePosition > 0 && timelinePosition <= runResult.trace.length) {
+      const currentEvent = runResult.trace[timelinePosition - 1];
+      if (currentEvent?.nodeId) {
+        targetNodeId = currentEvent.nodeId;
+      }
+    } 
+    // Priority 3: Initial run load (zoom to start node)
+    else if (timelinePosition === runResult.trace.length || timelinePosition === 0) {
+      targetNodeId = cfg.startNodeId;
     }
-  }, [timelinePosition, runResult, nodes, setCenter]);
 
-  // Sync selectedEventId -> selectedNodeId ONLY if clicked from trace
-  useEffect(() => {
-    if (selectedNodeId !== null && selectionSource === "trace" && runResult?.trace) {
-      const node = nodes.find(n => n.id === selectedNodeId);
+    if (targetNodeId) {
+      const node = nodes.find(n => n.id === targetNodeId);
       if (node) {
-        // Add a slight delay to ensure the DOM is ready for the transition
-        setTimeout(() => {
-          setCenter(node.position.x + 100, node.position.y + 50, { duration: 800, zoom: 1.2 });
+        const timer = setTimeout(() => {
+          setCenter(node.position.x + 100, node.position.y + 50, { duration: 600, zoom: 1.2 });
         }, 50);
+        return () => clearTimeout(timer);
       }
     }
-  }, [selectedNodeId, selectionSource, runResult, nodes, setCenter]);
+  }, [runResult, cfg, selectedNodeId, selectionSource, timelinePosition, nodes, setCenter]);
 
   // Fit view when CFG first loads (no run result yet)
   useEffect(() => {
@@ -89,20 +90,7 @@ function CfgGraph() {
       }, 100);
       return () => clearTimeout(timer);
     }
-  }, [cfg, fitView]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Zoom to start node when run result is available
-  useEffect(() => {
-    if (runResult && cfg) {
-      const startNode = nodes.find(n => n.id === cfg.startNodeId);
-      if (startNode) {
-        const timer = setTimeout(() => {
-          setCenter(startNode.position.x + 100, startNode.position.y + 30, { zoom: 1.2, duration: 800 });
-        }, 100);
-        return () => clearTimeout(timer);
-      }
-    }
-  }, [runResult, cfg, nodes, setCenter]);
+  }, [cfg, runResult, fitView, nodes.length]); // clean deps
 
   const onNodeClick = useCallback(
     (_: React.MouseEvent, node: { id: string }) => {
