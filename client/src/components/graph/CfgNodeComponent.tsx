@@ -37,10 +37,12 @@ export default function CfgNodeComponent({ data }: NodeProps) {
   const label = (d.label || "").length > 55 ? (d.label || "").slice(0, 52) + "..." : d.label || "";
   const isMerge = label.startsWith("(") && label.endsWith(")");
 
-  // Base class is either neu-inset or neu-extruded based on execution state
-  // We add ring-2 for selection state instead of manipulating border colors directly
-  const selectionClass = (d.isSelected ?? false) ? "ring-2 ring-[#6C63FF] ring-offset-2 ring-offset-[#E0E5EC]" : "";
-  const finalClassName = `${className} ${selectionClass} transition-all duration-300 ease-out`;
+  const finalClassName = `${className} transition-all duration-300 ease-out`;
+
+  // Use a strong inline boxShadow for selection to ensure it always renders correctly
+  const selectionStyle = (d.isSelected ?? false) 
+    ? { boxShadow: "0 0 0 2px var(--neu-bg), 0 0 0 4px var(--neu-accent)" }
+    : {};
 
   return (
     <motion.div
@@ -49,6 +51,7 @@ export default function CfgNodeComponent({ data }: NodeProps) {
       transition={{ duration: 0.3 }}
       className={finalClassName}
       style={{
+        ...selectionStyle,
         padding: isMerge ? "8px 16px" : isDiamond ? "16px 24px" : "12px 20px",
         borderRadius,
         backgroundColor: "var(--neu-bg)",
