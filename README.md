@@ -27,7 +27,6 @@ Most SQL debugging means staring at walls of T-SQL and guessing which branch ran
 ---
 <img width="2553" height="1291" alt="image" src="https://github.com/user-attachments/assets/06523e46-5492-438d-8e6d-07abf07b574d" />
 
-With AI
 <img width="2559" height="1274" alt="image" src="https://github.com/user-attachments/assets/a44b22f5-0628-48d6-9caf-122b5d37e18f" />
 
 ## 🖼️ Features at a Glance
