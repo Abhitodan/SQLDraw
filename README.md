@@ -25,6 +25,7 @@ Most SQL debugging means staring at walls of T-SQL and guessing which branch ran
 - **Ask your AI assistant** — chat with Claude, GPT, or Gemini about the procedure's logic, execution, or potential issues
 
 ---
+<img width="2553" height="1291" alt="image" src="https://github.com/user-attachments/assets/06523e46-5492-438d-8e6d-07abf07b574d" />
 
 ## 🖼️ Features at a Glance
 
